@@ -3,6 +3,11 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# My data
+
+\LessonLinker.UI\dataaccess.json
+\LessonLinker.UI\шаблон.docx
+
 # User-specific files
 *.rsuser
 *.suo
@@ -361,3 +366,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/LessonLinker.UI/шаблон.docx
+/LessonLinker.UI/dataaccess.json
