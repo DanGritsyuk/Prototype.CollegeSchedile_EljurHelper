@@ -44,7 +44,7 @@ namespace LessonLinker.UI
         public async Task Start()
         {            
             var creator = new DocumentProcessor();
-            creator.CreateAndMergeDocuments(@"шаблон.docx", @"Расписание.docx", GenerateDocument());
+            creator.CreateAndMergeDocuments(@"шаблон.docx", @"E:\Расписание.docx", GenerateDocument());
 
             while (true)
             {

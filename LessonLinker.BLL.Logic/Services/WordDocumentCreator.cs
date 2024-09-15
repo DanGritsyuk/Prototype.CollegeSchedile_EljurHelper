@@ -1,14 +1,8 @@
-﻿using DocumentFormat.OpenXml.Packaging;
+﻿using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
-using DocumentFormat.OpenXml;
-using System.IO;
 using LessonLinker.Common.Entities.ModelResponse.ApiScheduleResponse;
-using LessonLinker.Common.Entities.Schedule;
-using LessonLinker.Common.Entities.Extensions;
-using System.Linq;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Collections.Generic;
 
 public class DocumentProcessor
 {
@@ -150,17 +144,46 @@ public class DocumentProcessor
                 }
                 else
                 {
-                    // Несколько групп: уменьшаем ширину первой ячейки и создаем дополнительные
                     string lessNum = dayMark + GetSuffixForLessonNumber(firstLesson.Number);
-                    CreateLessonParagraph(element, lessNum, firstLesson.Name.ToUpper(), firstLesson.Teacher, firstLesson.Room, GetGroupNumberFormatted(firstLesson.GroupShort));
-
-                    AdjustCellWidth(element, lessNum, lessonItems.Count);
-
                     // Для каждой следующей группы создаем новую ячейку
-                    for (int i = 1; i < lessonItems.Count; i++)
+                    for (int i = 0; i < lessonItems.Count; i++)
                     {
+
+                        var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessNum));
+
+                        AdjustCellWidth(originalCell, lessNum, lessonItems.Count);
+
+                        var newCell = (TableCell)originalCell.Clone();
+
+                        CreateLessonParagraph(element, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
                         string groupNum = GetGroupNumberFormatted(lessonItems[i].GroupShort);
-                        CreateAdditionalGroupCell(element, lessNum, groupNum, lessonItems[i], i == lessonItems.Count - 1);
+
+                        // Получение ширины оригинальной ячейки
+                        var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+                        if (originalWidth != null)
+                        {
+                            // Извлечение значения ширины
+                            int originalWidthValue = int.Parse(originalWidth.Width);
+                            // Деление на количество ячеек для новой ширины
+                            int newWidthValue = originalWidthValue / lessonItems.Count;
+
+                            // Установка новой ширины ячейки
+                            var cellWidth = new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa };
+                            newCell.TableCellProperties.Append(cellWidth);
+                        }
+
+                        newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                            new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                            new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                            new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                            new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = i + 1 == lessonItems.Count - 1 ? (UInt32Value)18 : 4 } // Последняя ячейка с границей 8
+                        ));
+
+                        if (i < lessonItems.Count - 1)
+                        {
+                            var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
+                            parentRow?.Append(newCell);
+                        }
                     }
                 }
             }
@@ -175,14 +198,15 @@ public class DocumentProcessor
         if (firstCell)
         {
             // ГР1, помещаем в первую ячейку, вторую оставляем пустой
-            CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
             CreateEmptySecondCell(element, lessNum);
+            CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
+
         }
         else
         {
             // Не ГР1, первую ячейку оставляем пустой, вторую заполняем
             CreateEmptyFirstCell(element, lessNum);
-            CreateLessonParagraphForGroup(element, lessNum + "G2", lesson.Name.ToUpper(), lesson.Teacher, lesson.Room);
+            CreateLessonParagraphForGroup(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room);
         }
     }
 
@@ -208,8 +232,41 @@ public class DocumentProcessor
         if (originalCell != null)
         {
             var newCell = (TableCell)originalCell.Clone();
-            newCell.RemoveAllChildren();
-            newCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
+            originalCell.RemoveAllChildren();
+            originalCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
+
+            // Установка границ
+            originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 } // Последняя ячейка с границей 8
+            ));
+            newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 } // Последняя ячейка с границей 8
+            ));
+
+            // Получение ширины оригинальной ячейки
+            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+            if (originalWidth != null)
+            {
+                // Извлечение значения ширины
+                int originalWidthValue = int.Parse(originalWidth.Width);
+                // Деление на 2 для новой ширины
+                int newWidthValue = originalWidthValue / 2;
+
+                // Установка новой ширины ячейки
+                originalCell.TableCellProperties.Append(
+                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+                    );
+                newCell.TableCellProperties.Append(
+                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+                    );
+            }
+
             var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
             parentRow?.Append(newCell);
         }
@@ -224,43 +281,63 @@ public class DocumentProcessor
             var newCell = (TableCell)originalCell.Clone();
             newCell.RemoveAllChildren();
             newCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
-            var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
-            parentRow?.Append(newCell);
-        }
-    }
 
-    // Метод для создания дополнительных ячеек для последующих групп
-    private void CreateAdditionalGroupCell(OpenXmlElement element, string lessonMark, string groupNum, LessonItem lesson, bool isLast)
-    {
-        var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessonMark));
-        if (originalCell != null)
-        {
-            var newCell = (TableCell)originalCell.Clone();
-            newCell.RemoveAllChildren();
-
-            CreateLessonParagraph(newCell, lessonMark, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
-
-            var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
-            parentRow?.Append(newCell);
-
-            // Устанавливаем границы для новой ячейки
-            newCell.TableCellProperties.Append(new TableCellBorders(
-                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = isLast ? new UInt32Value((uint)8) : 4 } // Последняя ячейка с границей 8
+            // Установка границ
+            originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 } // Последняя ячейка с границей 8
             ));
+            newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 } // Последняя ячейка с границей 8
+            ));
+
+            // Получение ширины оригинальной ячейки
+            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+            if (originalWidth != null)
+            {
+                // Извлечение значения ширины
+                int originalWidthValue = int.Parse(originalWidth.Width);
+                // Деление на 2 для новой ширины
+                int newWidthValue = originalWidthValue / 2;
+
+                // Установка новой ширины ячейки
+                originalCell.TableCellProperties.Append(
+                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+                    );
+                newCell.TableCellProperties.Append(
+                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+                    );
+            }
+
+            var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
+            parentRow?.Append(newCell);
         }
     }
 
     // Метод для уменьшения ширины первой ячейки
-    private void AdjustCellWidth(OpenXmlElement element, string lessonMark, int groupCount)
+    private void AdjustCellWidth(TableCell originalCell, string lessonMark, int groupCount)
     {
-        var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessonMark));
         if (originalCell != null)
         {
-            double newWidth = 500 / groupCount; // Уменьшаем ширину ячейки, делим на количество групп
-            originalCell.TableCellProperties = new TableCellProperties(new TableCellWidth() { Type = TableWidthUnitValues.Dxa, Width = (newWidth * 20).ToString() });
+            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+            if (originalWidth != null)
+            {
+                // Извлечение значения ширины
+                int originalWidthValue = int.Parse(originalWidth.Width);
+                // Деление на 2
+                int newWidthValue = originalWidthValue / groupCount;
+
+                // Установка новой ширины ячейки
+                originalCell.TableCellProperties = new TableCellProperties(
+                    new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                    new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+                    );
+            }
         }
     }
 
