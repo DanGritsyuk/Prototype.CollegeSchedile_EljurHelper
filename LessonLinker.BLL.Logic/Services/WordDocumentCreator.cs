@@ -26,22 +26,13 @@ public class DocumentProcessor
                     Console.WriteLine($"Расписание для группы {response.GroupName} получено...");
                     using (WordprocessingDocument templateDoc = WordprocessingDocument.Open(templatePath, false))
                     {
-                        // Копируем содержимое из шаблона
                         var sourceBody = templateDoc.MainDocumentPart.Document.Body.CloneNode(true);
 
-                        // Заменяем <group> на 'Ф 11'
                         ReplaceText(sourceBody, "<Group>", response.GroupName!);
-
-                        // Устанавливаем даты и занятия
                         SetDates(sourceBody, response);
-
-                        // Очищаем неиспользованные маркеры после замены
                         ClearUnusedMarkers(sourceBody, "MonLess", "TuesLess", "WednesLess", "ThursLess", "FriLess", "SunLess");
 
-                        // Добавляем скопированное содержимое в body
                         body.Append(sourceBody);
-
-                        // Добавляем разделитель между документами (например, страница)
                         body.Append(new Paragraph(new Run(new Break() { Type = BreakValues.Page })));
 
                         Console.WriteLine($"Страница группы {response.GroupName} сформирована...");
@@ -53,10 +44,9 @@ public class DocumentProcessor
                 }
             }
 
-            // После завершения цикла добавляем body в mainPart.Document
             mainPart.Document.Append(body);
             mainPart.Document.Save();
-            Console.WriteLine($"Документ готов.");
+            Console.WriteLine("Документ готов.");
         }
     }
 
@@ -64,7 +54,6 @@ public class DocumentProcessor
     {
         foreach (var day in response.Response.Result.Days)
         {
-            // Преобразуем ключ (дату) из формата yyyyMMdd в формат dd.MM
             var formattedDate = FormatDate(day.Key);
 
             switch (day.Value.Title)
@@ -99,15 +88,12 @@ public class DocumentProcessor
         }
     }
 
-    // Метод для преобразования строки с датой из формата yyyyMMdd в формат dd.MM
     private string FormatDate(string date)
     {
         if (DateTime.TryParseExact(date, "yyyyMMdd", null, System.Globalization.DateTimeStyles.None, out DateTime parsedDate))
         {
-            // Возвращаем только день и месяц в формате dd.MM
             return parsedDate.ToString("dd.MM");
         }
-        // Если дата не в нужном формате, возвращаем пустую строку или оригинальную строку
         return date;
     }
 
@@ -118,111 +104,153 @@ public class DocumentProcessor
             var lessonItems = lessonGroup.OrderBy(l => GetGroupNumber(l.GroupShort)).ToList();
             var firstLesson = lessonItems.First();
 
-            // Если группа не указана (весь класс идет на урок), создаем одну ячейку
             if (string.IsNullOrEmpty(firstLesson.GroupShort))
             {
                 string lessNum = dayMark + GetSuffixForLessonNumber(firstLesson.Number);
-                CreateLessonParagraph(element, lessNum, firstLesson.Name.ToUpper(), firstLesson.Teacher, firstLesson.Room, ""); // Не указываем "ГР"
+                CreateLessonParagraph(element, lessNum, firstLesson.Name.ToUpper(), firstLesson.Teacher, firstLesson.Room, "");
             }
             else
             {
-                // Если указана только одна группа
                 if (lessonItems.Count == 1)
                 {
                     string groupNum = GetGroupNumberFormatted(firstLesson.GroupShort);
-
-                    // Если группа ГР1, помещаем в первую ячейку, вторую оставляем пустой
-                    if (groupNum == "ГР1")
-                    {
-                        CreateSingleGroupCell(element, dayMark, firstLesson, groupNum, true);
-                    }
-                    else
-                    {
-                        // Если группа не ГР1, первую ячейку оставляем пустой, а вторая содержит урок
-                        CreateSingleGroupCell(element, dayMark, firstLesson, groupNum, false);
-                    }
+                    CreateSingleGroupCell(element, dayMark, firstLesson, groupNum, groupNum == "ГР1");
                 }
                 else
                 {
-                    string lessNum = dayMark + GetSuffixForLessonNumber(firstLesson.Number);
-                    // Для каждой следующей группы создаем новую ячейку
-                    for (int i = 0; i < lessonItems.Count; i++)
-                    {
-
-                        var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessNum));
-
-                        AdjustCellWidth(originalCell, lessNum, lessonItems.Count);
-
-                        var newCell = (TableCell)originalCell.Clone();
-
-                        CreateLessonParagraph(element, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
-                        string groupNum = GetGroupNumberFormatted(lessonItems[i].GroupShort);
-
-                        // Получение ширины оригинальной ячейки
-                        var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
-                        if (originalWidth != null)
-                        {
-                            // Извлечение значения ширины
-                            int originalWidthValue = int.Parse(originalWidth.Width);
-                            // Деление на количество ячеек для новой ширины
-                            int newWidthValue = originalWidthValue / lessonItems.Count;
-
-                            // Установка новой ширины ячейки
-                            var cellWidth = new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa };
-                            newCell.TableCellProperties.Append(cellWidth);
-                        }
-
-                        newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                            new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                            new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                            new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                            new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = i + 1 == lessonItems.Count - 1 ? (UInt32Value)18 : 4 } // Последняя ячейка с границей 8
-                        ));
-
-                        if (i < lessonItems.Count - 1)
-                        {
-                            var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
-                            parentRow?.Append(newCell);
-                        }
-                    }
+                    CreateMultipleGroupCells(element, dayMark, lessonItems);
                 }
             }
         }
     }
 
-    // Метод для создания одной группы с выбором, пустая ли первая или вторая ячейка
+    private void CreateMultipleGroupCells(OpenXmlElement element, string dayMark, List<LessonItem> lessonItems)
+    {
+        string lessNum = dayMark + GetSuffixForLessonNumber(lessonItems.First().Number);
+        var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessNum));
+
+        if (originalCell != null)
+        {
+            int newWidthValue = AdjustCellWidth(originalCell, lessonItems.Count);
+
+            originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
+                new TableCellWidth { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+            ));
+
+            var buffCell = (TableCell)originalCell.Clone();
+
+            CreateLessonParagraph(element, lessNum, lessonItems[0].Name.ToUpper(), lessonItems[0].Teacher, lessonItems[0].Room, GetGroupNumberFormatted(lessonItems[0].GroupShort));
+
+            for (int i = 1; i < lessonItems.Count; i++)
+            {
+                var newCell = (TableCell)buffCell.Clone();
+
+                originalCell.Ancestors<TableRow>().FirstOrDefault()?.Append(newCell);
+                CreateLessonParagraph(element, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
+
+                newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                    i < lessonItems.Count - 1 ? new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
+                    : new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 },
+                    new TableCellWidth { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
+                ));
+
+
+            }
+        }
+    }
+
     private void CreateSingleGroupCell(OpenXmlElement element, string dayMark, LessonItem lesson, string groupNum, bool firstCell)
     {
         string lessNum = dayMark + GetSuffixForLessonNumber(lesson.Number);
 
         if (firstCell)
         {
-            // ГР1, помещаем в первую ячейку, вторую оставляем пустой
             CreateEmptySecondCell(element, lessNum);
             CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
-
         }
         else
         {
-            // Не ГР1, первую ячейку оставляем пустой, вторую заполняем
             CreateEmptyFirstCell(element, lessNum);
-            CreateLessonParagraphForGroup(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room);
+            CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
         }
     }
 
-    // Унификация и извлечение номера группы
-    private int GetGroupNumber(string group)
+    private int AdjustCellWidth(TableCell cell, int groupCount)
     {
-        if (string.IsNullOrEmpty(group)) return 0; // Если группа не указана, считаем, что группа одна, но без номера
-        var match = Regex.Match(group.ToUpper(), @"\d+");
-        return match.Success ? int.Parse(match.Value) : 0; // Если нашли номер группы, возвращаем его, иначе 0
+        if (int.TryParse(cell.TableCellProperties?.GetFirstChild<TableCellWidth>().Width, out int originalWidth))
+        {
+            int newWidthValue = originalWidth / groupCount;
+            cell.TableCellProperties.Append(new TableCellWidth { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
+            return newWidthValue;
+        }
+        return originalWidth;
     }
 
-    // Приведение группы к общему формату ГРN
-    private string GetGroupNumberFormatted(string group)
+    private void ReplaceText(OpenXmlElement element, string oldValue, string newValue)
     {
-        int groupNum = GetGroupNumber(group);
-        return groupNum > 0 ? "ГР" + groupNum : ""; // Возвращаем ГР1, ГР2 и т.д. или пустую строку, если группа не указана
+        foreach (var text in element.Descendants<Text>())
+        {
+            if (text.Text.Contains(oldValue))
+            {
+                text.Text = text.Text.Replace(oldValue, newValue);
+            }
+        }
+    }
+
+    private void ClearUnusedMarkers(OpenXmlElement element, params string[] dayMarks)
+    {
+        string[] suffixes = { "One", "Two", "Three", "Four", "Five", "Six" };
+
+        foreach (var textElement in element.Descendants<Text>())
+        {
+            foreach (var dayMark in dayMarks)
+            {
+                foreach (var suffix in suffixes)
+                {
+                    string fullMarker = dayMark + suffix;
+                    if (textElement.Text.Contains(fullMarker))
+                    {
+                        textElement.Text = textElement.Text.Replace(fullMarker, string.Empty);
+                    }
+                }
+            }
+        }
+    }
+
+    private string GetSuffixForLessonNumber(string number) => number switch
+    {
+        "1" => "One",
+        "2" => "Two",
+        "3" => "Three",
+        "4" => "Four",
+        "5" => "Five",
+        "6" => "Six",
+        _ => "Unknown"
+    };
+
+    private int GetGroupNumber(string group) => int.TryParse(Regex.Match(group?.ToUpper() ?? string.Empty, @"\d+").Value, out int num) ? num : 0;
+
+    private string GetGroupNumberFormatted(string group) => $"ГР{GetGroupNumber(group)}";
+
+    private bool IsRoomValid(string room) => Regex.IsMatch(room, @"^\d+(-\d+)?$");
+
+    private void CreateLessonParagraph(OpenXmlElement element, string lessonMark, string lessonName, string teacherInitials, string room, string group)
+    {
+        foreach (var textElement in element.Descendants<Text>())
+        {
+            if (textElement.Text.Contains(lessonMark))
+            {
+                var lessonText = $"{lessonName} {group}";
+                var roomText = IsRoomValid(room) ? $" КАБ {room}" : $" {room}";
+                teacherInitials = GetTeacherInitials(teacherInitials);
+
+                textElement.Parent.InsertBeforeSelf(new Run(new RunProperties(new Bold(), new Italic(), new FontSize { Val = "18" }), new Text(lessonText)));
+                textElement.Parent.InsertBeforeSelf(new Run(new RunProperties(new Bold(), new Italic(), new FontSize { Val = "18" }), new Break { Type = BreakValues.TextWrapping }, new Text($"{teacherInitials.ToUpper()}{roomText}")));
+
+                textElement.Remove();
+            }
+        }
     }
 
     // Метод для создания пустой первой ячейки
@@ -237,16 +265,10 @@ public class DocumentProcessor
 
             // Установка границ
             originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 } // Последняя ячейка с границей 8
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
             ));
             newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 } // Последняя ячейка с границей 8
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 }
             ));
 
             // Получение ширины оригинальной ячейки
@@ -267,8 +289,7 @@ public class DocumentProcessor
                     );
             }
 
-            var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
-            parentRow?.Append(newCell);
+            originalCell.Ancestors<TableRow>().FirstOrDefault().Append(newCell);
         }
     }
 
@@ -284,15 +305,9 @@ public class DocumentProcessor
 
             // Установка границ
             originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
                 new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 } // Последняя ячейка с границей 8
             ));
             newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                //new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                //new LeftBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
                 new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 } // Последняя ячейка с границей 8
             ));
 
@@ -318,118 +333,6 @@ public class DocumentProcessor
             parentRow?.Append(newCell);
         }
     }
-
-    // Метод для уменьшения ширины первой ячейки
-    private void AdjustCellWidth(TableCell originalCell, string lessonMark, int groupCount)
-    {
-        if (originalCell != null)
-        {
-            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
-            if (originalWidth != null)
-            {
-                // Извлечение значения ширины
-                int originalWidthValue = int.Parse(originalWidth.Width);
-                // Деление на 2
-                int newWidthValue = originalWidthValue / groupCount;
-
-                // Установка новой ширины ячейки
-                originalCell.TableCellProperties = new TableCellProperties(
-                    new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                    new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-                    );
-            }
-        }
-    }
-
-    // Генерация суффикса для номера урока
-    private string GetSuffixForLessonNumber(string number)
-    {
-        return number switch
-        {
-            "1" => "One",
-            "2" => "Two",
-            "3" => "Three",
-            "4" => "Four",
-            "5" => "Five",
-            "6" => "Six",
-            _ => "Unknown"
-        };
-    }
-
-    // Дополнительный метод для создания параграфа для второй группы
-    private void CreateLessonParagraphForGroup(OpenXmlElement element, string lessonMark, string lessonName, string teacherInitials, string room)
-    {
-        foreach (var textElement in element.Descendants<Text>())
-        {
-            if (textElement.Text.Contains(lessonMark))
-            {
-                // Создаем новый Run для lessonName (жирный и курсив)
-                var lessonNameRun = new Run(
-                    new RunProperties(
-                        new Bold(),                    // Жирный текст
-                        new Italic(),                  // Курсив
-                        new FontSize() { Val = "18" }  // Устанавливаем шрифт 9
-                    ),
-                    new Text(lessonName)
-                );
-
-                // Проверяем, нужно ли добавлять префикс "КАБ"
-                string roomText = room != null && IsRoomValid(room) ? $" КАБ {room}" : $" {room}";
-
-                // Создаем новый Run для teacherInitials + комната (жирный и курсив)
-                var teacherRun = new Run(
-                    new RunProperties(
-                        new Bold(),                    // Жирный текст
-                        new Italic(),                  // Курсив
-                        new FontSize() { Val = "18" }  // Шрифт 9
-                    ),
-                    new Break() { Type = BreakValues.TextWrapping },   // Переход на новую строку (Shift+Enter)
-                    new Text($"{teacherInitials}{roomText}")
-                );
-
-                // Заменяем текст в элементе на два новых Run
-                textElement.Parent.InsertBeforeSelf(lessonNameRun);
-                textElement.Parent.InsertBeforeSelf(teacherRun);
-
-                textElement.Remove(); // Удаляем старый текст
-            }
-        }
-    }
-
-    private void ReplaceText(OpenXmlElement element, string oldValue, string newValue)
-    {
-        foreach (var text in element.Descendants<Text>())
-        {
-            if (text.Text.Contains(oldValue))
-            {
-                text.Text = text.Text.Replace(oldValue, newValue);
-            }
-        }
-    }
-
-    // Метод для удаления неиспользованных маркеров с суффиксами
-    private void ClearUnusedMarkers(OpenXmlElement element, params string[] dayMarks)
-    {
-        // Суффиксы для каждого маркера от One до Six
-        string[] suffixes = { "One", "Two", "Three", "Four", "Five", "Six" };
-
-        foreach (var textElement in element.Descendants<Text>())
-        {
-            foreach (var dayMark in dayMarks)
-            {
-                foreach (var suffix in suffixes)
-                {
-                    string fullMarker = dayMark + suffix;
-                    if (textElement.Text.Contains(fullMarker))
-                    {
-                        // Очищаем текст, если маркер найден
-                        textElement.Text = textElement.Text.Replace(fullMarker, string.Empty);
-                    }
-                }
-            }
-        }
-    }
-
 
     // Преобразование полного ФИО в "Фамилия И.О."
     private string GetTeacherInitials(string fullName)
@@ -448,45 +351,5 @@ public class DocumentProcessor
         }
 
         return initials;
-    }
-
-    // Метод для создания форматированного абзаца с переходом на новую строку (Shift+Enter) и жирностью + курсивом
-    private void CreateLessonParagraph(OpenXmlElement element, string lessonMark, string lessonName, string teacherInitials, string room, string group)
-    {
-        foreach (var textElement in element.Descendants<Text>())
-        {
-            if (textElement.Text.Contains(lessonMark))
-            {
-                // Формируем текст для группы, добавляя метку группы (например, ГР1)
-                string lessonText = $"{lessonName} {group}";
-
-                // Создаем новый Run для lessonName (жирный и курсив)
-                var lessonRun = new Run(
-                    new RunProperties(new Bold(), new Italic(), new FontSize() { Val = "18" }),
-                    new Text(lessonText)
-                );
-
-                // Создаем новый Run для teacherInitials + комната (жирный и курсив)
-                string roomText = room != null && IsRoomValid(room) ? $" КАБ {room}" : $" {room}";
-                var teacherRun = new Run(
-                    new RunProperties(new Bold(), new Italic(), new FontSize() { Val = "18" }),
-                    new Break() { Type = BreakValues.TextWrapping },
-                    new Text($"{teacherInitials}{roomText}")
-                );
-
-                // Заменяем текст в элементе на два новых Run
-                textElement.Parent.InsertBeforeSelf(lessonRun);
-                textElement.Parent.InsertBeforeSelf(teacherRun);
-
-                textElement.Remove(); // Удаляем старый текст
-            }
-        }
-    }
-
-    // Метод для проверки, является ли строка допустимым номером кабинета (состоит только из цифр или цифр с дефисом)
-    private bool IsRoomValid(string room)
-    {
-        // Регулярное выражение для проверки: строка содержит только цифры или цифры с дефисом
-        return Regex.IsMatch(room, @"^\d+(-\d+)?$");
     }
 }

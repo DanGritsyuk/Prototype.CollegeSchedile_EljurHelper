@@ -33,7 +33,7 @@ namespace LessonLinker.BLL.Logic.Services
                               $"&vendor={Uri.EscapeDataString(_authData.Vendor)}" +
                               $"&auth_token={Uri.EscapeDataString(_authData.Token)}" +
                               $"&class={Uri.EscapeDataString(group)}" +
-                              $"&days=20240916-20240922" +
+                              $"&days=20240923-20240929" +
                               $"&out_format=json";
 
             // Формируем полный URL
