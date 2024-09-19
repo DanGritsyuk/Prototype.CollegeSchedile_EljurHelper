@@ -2,6 +2,7 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using LessonLinker.Common.Entities.ModelResponse.ApiScheduleResponse;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 public class DocumentProcessor
@@ -257,6 +258,18 @@ public class DocumentProcessor
     private void CreateEmptyFirstCell(OpenXmlElement element, string lessonMark)
     {
         var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessonMark));
+
+        uint topBorder = 4;
+        uint bottomBorder = 4;
+
+        // Получение границ оригинальной ячейки
+        if (originalCell!.TableCellProperties != null 
+            && originalCell.TableCellProperties.TableCellBorders != null)
+        {
+            topBorder = originalCell.TableCellProperties.TableCellBorders.TopBorder != null ? originalCell.TableCellProperties.TableCellBorders.TopBorder.Size : 4;
+            bottomBorder = originalCell.TableCellProperties.TableCellBorders.BottomBorder != null ? originalCell.TableCellProperties.TableCellBorders.BottomBorder.Size : 4;
+        }
+
         if (originalCell != null)
         {
             var newCell = (TableCell)originalCell.Clone();
@@ -265,9 +278,13 @@ public class DocumentProcessor
 
             // Установка границ
             originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
                 new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
             ));
             newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
                 new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 }
             ));
 
@@ -297,6 +314,18 @@ public class DocumentProcessor
     private void CreateEmptySecondCell(OpenXmlElement element, string lessonMark)
     {
         var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessonMark));
+
+        uint topBorder = 4;
+        uint bottomBorder = 4;
+
+        // Получение границ оригинальной ячейки
+        if (originalCell!.TableCellProperties != null
+            && originalCell.TableCellProperties.TableCellBorders != null)
+        {
+            topBorder = originalCell.TableCellProperties.TableCellBorders.TopBorder != null ? originalCell.TableCellProperties.TableCellBorders.TopBorder.Size : 4;
+            bottomBorder = originalCell.TableCellProperties.TableCellBorders.BottomBorder != null ? originalCell.TableCellProperties.TableCellBorders.BottomBorder.Size : 4;
+        }
+
         if (originalCell != null)
         {
             var newCell = (TableCell)originalCell.Clone();
@@ -305,10 +334,14 @@ public class DocumentProcessor
 
             // Установка границ
             originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 } // Последняя ячейка с границей 8
+                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
             ));
             newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 } // Последняя ячейка с границей 8
+                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
+                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 }
             ));
 
             // Получение ширины оригинальной ячейки
