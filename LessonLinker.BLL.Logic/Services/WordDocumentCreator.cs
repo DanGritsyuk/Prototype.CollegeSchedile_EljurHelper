@@ -132,34 +132,72 @@ public class DocumentProcessor
 
         if (originalCell != null)
         {
+            // Получаем значения topBorder и bottomBorder у originalCell
+            uint topBorder = 4;
+            uint bottomBorder = 4;
+
+            if (originalCell.TableCellProperties?.TableCellBorders != null)
+            {
+                topBorder = originalCell.TableCellProperties.TableCellBorders.TopBorder?.Size ?? 4;
+                bottomBorder = originalCell.TableCellProperties.TableCellBorders.BottomBorder?.Size ?? 4;
+            }
+
+            // Рассчитываем новую ширину ячейки
             int newWidthValue = AdjustCellWidth(originalCell, lessonItems.Count);
 
-            originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 },
-                new TableCellWidth { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-            ));
+            // Применяем границы и устанавливаем ширину для оригинальной ячейки
+            ApplyBorders(originalCell, topBorder, bottomBorder, 4, newWidthValue);
 
+            // Клонируем ячейку для дальнейшего использования
             var buffCell = (TableCell)originalCell.Clone();
 
+            // Заполняем первую ячейку
             CreateLessonParagraph(element, lessNum, lessonItems[0].Name.ToUpper(), lessonItems[0].Teacher, lessonItems[0].Room, GetGroupNumberFormatted(lessonItems[0].GroupShort));
 
+            // Создаем остальные ячейки для каждой следующей группы
             for (int i = 1; i < lessonItems.Count; i++)
             {
                 var newCell = (TableCell)buffCell.Clone();
 
+                // Вставляем новую ячейку в строку
                 originalCell.Ancestors<TableRow>().FirstOrDefault()?.Append(newCell);
+
+                // Заполняем ячейку данными о следующей группе
                 CreateLessonParagraph(element, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
 
-                newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                    i < lessonItems.Count - 1 ? new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
-                    : new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 },
-                    new TableCellWidth { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-                ));
-
-
+                // Применяем границы и ширину к новой ячейке
+                ApplyBorders(newCell, topBorder, bottomBorder, (i == lessonItems.Count - 1) ? (uint)18 : 4, newWidthValue);
             }
         }
     }
+
+    // Метод для изменения ширины ячеек
+    private int AdjustCellWidth(TableCell originalCell, int groupCount)
+    {
+        var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+        if (originalWidth != null)
+        {
+            // Извлечение значения ширины
+            int originalWidthValue = int.Parse(originalWidth.Width);
+            // Деление на количество групп
+            return originalWidthValue / groupCount;
+        }
+        return 0;
+    }
+
+    // Применение границ и ширины к ячейке
+    private void ApplyBorders(TableCell cell, uint topBorder, uint bottomBorder, uint rightBorderSize, int newWidthValue)
+    {
+        cell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+            new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+            new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
+            new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = rightBorderSize }
+        ));
+
+        // Устанавливаем новую ширину ячейки
+        cell.TableCellProperties.Append(new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
+    }
+
 
     private void CreateSingleGroupCell(OpenXmlElement element, string dayMark, LessonItem lesson, string groupNum, bool firstCell)
     {
@@ -175,17 +213,6 @@ public class DocumentProcessor
             CreateEmptyFirstCell(element, lessNum);
             CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
         }
-    }
-
-    private int AdjustCellWidth(TableCell cell, int groupCount)
-    {
-        if (int.TryParse(cell.TableCellProperties?.GetFirstChild<TableCellWidth>().Width, out int originalWidth))
-        {
-            int newWidthValue = originalWidth / groupCount;
-            cell.TableCellProperties.Append(new TableCellWidth { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
-            return newWidthValue;
-        }
-        return originalWidth;
     }
 
     private void ReplaceText(OpenXmlElement element, string oldValue, string newValue)
@@ -255,7 +282,7 @@ public class DocumentProcessor
     }
 
     // Метод для создания пустой первой ячейки
-    private void CreateEmptyFirstCell(OpenXmlElement element, string lessonMark)
+    private void CreateEmptyCell(OpenXmlElement element, string lessonMark, bool isFirstCell)
     {
         var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessonMark));
 
@@ -263,67 +290,10 @@ public class DocumentProcessor
         uint bottomBorder = 4;
 
         // Получение границ оригинальной ячейки
-        if (originalCell!.TableCellProperties != null 
-            && originalCell.TableCellProperties.TableCellBorders != null)
+        if (originalCell?.TableCellProperties?.TableCellBorders != null)
         {
-            topBorder = originalCell.TableCellProperties.TableCellBorders.TopBorder != null ? originalCell.TableCellProperties.TableCellBorders.TopBorder.Size : 4;
-            bottomBorder = originalCell.TableCellProperties.TableCellBorders.BottomBorder != null ? originalCell.TableCellProperties.TableCellBorders.BottomBorder.Size : 4;
-        }
-
-        if (originalCell != null)
-        {
-            var newCell = (TableCell)originalCell.Clone();
-            originalCell.RemoveAllChildren();
-            originalCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
-
-            // Установка границ
-            originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
-                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
-            ));
-            newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
-                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 }
-            ));
-
-            // Получение ширины оригинальной ячейки
-            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
-            if (originalWidth != null)
-            {
-                // Извлечение значения ширины
-                int originalWidthValue = int.Parse(originalWidth.Width);
-                // Деление на 2 для новой ширины
-                int newWidthValue = originalWidthValue / 2;
-
-                // Установка новой ширины ячейки
-                originalCell.TableCellProperties.Append(
-                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-                    );
-                newCell.TableCellProperties.Append(
-                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-                    );
-            }
-
-            originalCell.Ancestors<TableRow>().FirstOrDefault().Append(newCell);
-        }
-    }
-
-    // Метод для создания пустой второй ячейки
-    private void CreateEmptySecondCell(OpenXmlElement element, string lessonMark)
-    {
-        var originalCell = element.Descendants<TableCell>().FirstOrDefault(tc => tc.InnerText.Contains(lessonMark));
-
-        uint topBorder = 4;
-        uint bottomBorder = 4;
-
-        // Получение границ оригинальной ячейки
-        if (originalCell!.TableCellProperties != null
-            && originalCell.TableCellProperties.TableCellBorders != null)
-        {
-            topBorder = originalCell.TableCellProperties.TableCellBorders.TopBorder != null ? originalCell.TableCellProperties.TableCellBorders.TopBorder.Size : 4;
-            bottomBorder = originalCell.TableCellProperties.TableCellBorders.BottomBorder != null ? originalCell.TableCellProperties.TableCellBorders.BottomBorder.Size : 4;
+            topBorder = originalCell.TableCellProperties.TableCellBorders.TopBorder?.Size ?? 4;
+            bottomBorder = originalCell.TableCellProperties.TableCellBorders.BottomBorder?.Size ?? 4;
         }
 
         if (originalCell != null)
@@ -333,38 +303,55 @@ public class DocumentProcessor
             newCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
 
             // Установка границ
-            originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
-                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
-            ));
-            newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
-                new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
-                new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
-                new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 }
-            ));
+            ApplyBorders(originalCell, newCell, topBorder, bottomBorder, isFirstCell);
 
-            // Получение ширины оригинальной ячейки
-            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
-            if (originalWidth != null)
-            {
-                // Извлечение значения ширины
-                int originalWidthValue = int.Parse(originalWidth.Width);
-                // Деление на 2 для новой ширины
-                int newWidthValue = originalWidthValue / 2;
-
-                // Установка новой ширины ячейки
-                originalCell.TableCellProperties.Append(
-                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-                    );
-                newCell.TableCellProperties.Append(
-                        new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa }
-                    );
-            }
+            // Получение ширины оригинальной ячейки и изменение ширины
+            AdjustCellWidths(originalCell, newCell);
 
             var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
             parentRow?.Append(newCell);
         }
+    }
+
+    // Применение границ к ячейкам
+    private void ApplyBorders(TableCell originalCell, TableCell newCell, uint topBorder, uint bottomBorder, bool isFirstCell)
+    {
+        originalCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+            new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+            new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
+            new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 4 }
+        ));
+        newCell.TableCellProperties = new TableCellProperties(new TableCellBorders(
+            new TopBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = topBorder },
+            new BottomBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = bottomBorder },
+            new RightBorder() { Val = new EnumValue<BorderValues>(BorderValues.Single), Size = 18 }
+        ));
+    }
+
+    // Изменение ширины ячеек
+    private void AdjustCellWidths(TableCell originalCell, TableCell newCell)
+    {
+        var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+        if (originalWidth != null)
+        {
+            int originalWidthValue = int.Parse(originalWidth.Width);
+            int newWidthValue = originalWidthValue / 2;
+
+            originalCell.TableCellProperties.Append(new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
+            newCell.TableCellProperties.Append(new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
+        }
+    }
+
+    // Метод для создания пустой первой ячейки
+    private void CreateEmptyFirstCell(OpenXmlElement element, string lessonMark)
+    {
+        CreateEmptyCell(element, lessonMark, true);
+    }
+
+    // Метод для создания пустой второй ячейки
+    private void CreateEmptySecondCell(OpenXmlElement element, string lessonMark)
+    {
+        CreateEmptyCell(element, lessonMark, false);
     }
 
     // Преобразование полного ФИО в "Фамилия И.О."
