@@ -160,13 +160,38 @@ public class DocumentProcessor
                 var newCell = (TableCell)buffCell.Clone();
 
                 // Вставляем новую ячейку в строку
-                originalCell.Ancestors<TableRow>().FirstOrDefault()?.Append(newCell);
+                var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
+                parentRow?.Append(newCell);
 
                 // Заполняем ячейку данными о следующей группе
-                CreateLessonParagraph(element, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
+                CreateLessonParagraph(newCell, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
 
                 // Применяем границы и ширину к новой ячейке
                 ApplyBorders(newCell, topBorder, bottomBorder, (i == lessonItems.Count - 1) ? (uint)18 : 4, newWidthValue);
+            }
+        }
+    }
+
+
+    /// Метод для корректировки ширины всех ячеек в строке после их добавления
+    private void AdjustRowCellWidths(TableRow row, int groupCount)
+    {
+        if (row != null)
+        {
+            var cells = row.Elements<TableCell>().ToList();
+
+            // Рассчитываем новую ширину для каждой ячейки
+            int totalWidth = cells.Sum(cell => int.Parse(cell.TableCellProperties.GetFirstChild<TableCellWidth>().Width));
+            int newWidth = --totalWidth / groupCount;
+
+            // Применяем новую ширину для каждой ячейки
+            foreach (var cell in cells)
+            {
+                var cellWidth = cell.TableCellProperties.GetFirstChild<TableCellWidth>();
+                if (cellWidth != null)
+                {
+                    cellWidth.Width = newWidth.ToString();
+                }
             }
         }
     }
