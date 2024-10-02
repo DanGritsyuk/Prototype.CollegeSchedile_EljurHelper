@@ -100,6 +100,8 @@ public class DocumentProcessor
 
     private void SetLessons(OpenXmlElement element, string dayMark, Day day)
     {
+        if (day.Items is null) return;
+
         foreach (var lessonGroup in day.Items.GroupBy(l => l.Number))
         {
             var lessonItems = lessonGroup.OrderBy(l => GetGroupNumber(l.GroupShort)).ToList();
@@ -253,7 +255,7 @@ public class DocumentProcessor
 
     private void ClearUnusedMarkers(OpenXmlElement element, params string[] dayMarks)
     {
-        string[] suffixes = { "One", "Two", "Three", "Four", "Five", "Six" };
+        string[] suffixes = { "One", "Two", "Three", "Four", "Five", "Six", "Seven" };
 
         foreach (var textElement in element.Descendants<Text>())
         {
@@ -279,6 +281,7 @@ public class DocumentProcessor
         "4" => "Four",
         "5" => "Five",
         "6" => "Six",
+        "7" => "Seven",
         _ => "Unknown"
     };
 
