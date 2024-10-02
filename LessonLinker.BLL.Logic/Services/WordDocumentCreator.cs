@@ -145,7 +145,14 @@ public class DocumentProcessor
             }
 
             // Рассчитываем новую ширину ячейки
-            int newWidthValue = AdjustCellWidth(originalCell, lessonItems.Count);
+            int newWidthValue = 0, originalWidthValue = 0;
+            var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
+
+            if (originalWidth is not null)
+            {
+                originalWidthValue = int.Parse(originalWidth.Width!);
+                newWidthValue = originalWidthValue / lessonItems.Count;
+            }
 
             // Применяем границы и устанавливаем ширину для оригинальной ячейки
             ApplyBorders(originalCell, topBorder, bottomBorder, 4, newWidthValue);
@@ -198,20 +205,6 @@ public class DocumentProcessor
         }
     }
 
-    // Метод для изменения ширины ячеек
-    private int AdjustCellWidth(TableCell originalCell, int groupCount)
-    {
-        var originalWidth = originalCell.TableCellProperties?.GetFirstChild<TableCellWidth>();
-        if (originalWidth != null)
-        {
-            // Извлечение значения ширины
-            int originalWidthValue = int.Parse(originalWidth.Width);
-            // Деление на количество групп
-            return originalWidthValue / groupCount;
-        }
-        return 0;
-    }
-
     // Применение границ и ширины к ячейке
     private void ApplyBorders(TableCell cell, uint topBorder, uint bottomBorder, uint rightBorderSize, int newWidthValue)
     {
@@ -230,16 +223,8 @@ public class DocumentProcessor
     {
         string lessNum = dayMark + GetSuffixForLessonNumber(lesson.Number);
 
-        if (firstCell)
-        {
-            CreateEmptySecondCell(element, lessNum);
-            CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
-        }
-        else
-        {
-            CreateEmptyFirstCell(element, lessNum);
-            CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
-        }
+        CreateEmptyCell(element, lessNum, firstCell);
+        CreateLessonParagraph(element, lessNum, lesson.Name.ToUpper(), lesson.Teacher, lesson.Room, groupNum);
     }
 
     private void ReplaceText(OpenXmlElement element, string oldValue, string newValue)
@@ -257,7 +242,7 @@ public class DocumentProcessor
     {
         string[] suffixes = { "One", "Two", "Three", "Four", "Five", "Six", "Seven" };
 
-        foreach (var textElement in element.Descendants<Text>())
+        foreach (var textElement in element.Descendants<Text>().ToList())
         {
             foreach (var dayMark in dayMarks)
             {
@@ -266,12 +251,29 @@ public class DocumentProcessor
                     string fullMarker = dayMark + suffix;
                     if (textElement.Text.Contains(fullMarker))
                     {
-                        textElement.Text = textElement.Text.Replace(fullMarker, string.Empty);
+                        if (suffix.Contains(suffixes[6]))
+                        {
+                            var tableCell = textElement.Ancestors<TableCell>().FirstOrDefault();
+                            if (tableCell != null)
+                            {
+                                var tableRow = tableCell.Ancestors<TableRow>().FirstOrDefault();
+                                if (tableRow != null)
+                                {
+                                    tableRow.Remove();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            textElement.Text = textElement.Text.Replace(fullMarker, string.Empty);
+                        }
+
                     }
                 }
             }
         }
     }
+
 
     private string GetSuffixForLessonNumber(string number) => number switch
     {
@@ -327,8 +329,17 @@ public class DocumentProcessor
         if (originalCell != null)
         {
             var newCell = (TableCell)originalCell.Clone();
-            newCell.RemoveAllChildren();
-            newCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
+
+            if (isFirstCell)
+            {
+                newCell.RemoveAllChildren();
+            }
+            else
+            {
+                originalCell.RemoveAllChildren();
+            }
+
+            //newCell.Append(new Paragraph(new Run(new Text("")))); // Пустая ячейка
 
             // Установка границ
             ApplyBorders(originalCell, newCell, topBorder, bottomBorder, isFirstCell);
@@ -368,18 +379,6 @@ public class DocumentProcessor
             originalCell.TableCellProperties.Append(new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
             newCell.TableCellProperties.Append(new TableCellWidth() { Width = newWidthValue.ToString(), Type = TableWidthUnitValues.Dxa });
         }
-    }
-
-    // Метод для создания пустой первой ячейки
-    private void CreateEmptyFirstCell(OpenXmlElement element, string lessonMark)
-    {
-        CreateEmptyCell(element, lessonMark, true);
-    }
-
-    // Метод для создания пустой второй ячейки
-    private void CreateEmptySecondCell(OpenXmlElement element, string lessonMark)
-    {
-        CreateEmptyCell(element, lessonMark, false);
     }
 
     // Преобразование полного ФИО в "Фамилия И.О."
