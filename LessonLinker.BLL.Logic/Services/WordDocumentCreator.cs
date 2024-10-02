@@ -154,11 +154,11 @@ public class DocumentProcessor
                 newWidthValue = originalWidthValue / lessonItems.Count;
             }
 
-            // Применяем границы и устанавливаем ширину для оригинальной ячейки
-            ApplyBorders(originalCell, topBorder, bottomBorder, 4, newWidthValue);
-
             // Клонируем ячейку для дальнейшего использования
-            var buffCell = (TableCell)originalCell.Clone();
+            var buffCell = originalCell;
+
+            // Вставляем новую ячейку в строку
+            var parentRow = buffCell.Ancestors<TableRow>().FirstOrDefault();
 
             // Заполняем первую ячейку
             CreateLessonParagraph(element, lessNum, lessonItems[0].Name.ToUpper(), lessonItems[0].Teacher, lessonItems[0].Room, GetGroupNumberFormatted(lessonItems[0].GroupShort));
@@ -168,15 +168,17 @@ public class DocumentProcessor
             {
                 var newCell = (TableCell)buffCell.Clone();
 
-                // Вставляем новую ячейку в строку
-                var parentRow = originalCell.Ancestors<TableRow>().FirstOrDefault();
-                parentRow?.Append(newCell);
+                // Применяем границы и устанавливаем ширину для предыдущей ячейки
+                ApplyBorders(buffCell, topBorder, bottomBorder, 4, newWidthValue);
 
                 // Заполняем ячейку данными о следующей группе
                 CreateLessonParagraph(newCell, lessNum, lessonItems[i].Name.ToUpper(), lessonItems[i].Teacher, lessonItems[i].Room, GetGroupNumberFormatted(lessonItems[i].GroupShort));
-
                 // Применяем границы и ширину к новой ячейке
-                ApplyBorders(newCell, topBorder, bottomBorder, (i == lessonItems.Count - 1) ? (uint)18 : 4, newWidthValue);
+                ApplyBorders(newCell, topBorder, bottomBorder, (i == lessonItems.Count - 1) ? (uint)18 : 4, originalWidthValue - newWidthValue * i );
+
+                parentRow?.Append(newCell);
+
+                buffCell = newCell;
             }
         }
     }
